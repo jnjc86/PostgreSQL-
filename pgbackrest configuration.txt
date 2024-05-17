@@ -1,0 +1,144 @@
+[root@localhost ~]# mkdir -p /var/lib/pgbackrest
+[root@localhost ~]# chmod 0750 /var/lib/pgbackrest
+[root@localhost ~]# chown -R postgres:postgres /var/lib/pgbackrest
+[root@localhost ~]# chown -R postgres:postgres /var/log/pgbackrest
+[root@localhost ~]# openssl rand -base64 48
+Dy/awUG5mRE+WaqvlIqrSCqzojYAWXr9aW7Hx+PeH48nS9L24xndzqSR8eZEimuR
+[root@localhost ~]# vi /etc/pgbackrest.conf
+
+[global]
+repo1-cipher-pass=Dy/awUG5mRE+WaqvlIqrSCqzojYAWXr9aW7Hx+PeH48nS9L24xndzqSR8eZEimuR
+repo1-cipher-type=aes-256-cbc
+repo1-path=/var/lib/pgbackrest
+repo1-retention-full=2
+log-level-console=info
+log-level-file=debug
+
+[demo]
+pg1-path=/var/lib/pgsql/storage2
+pg1-port= 5434
+
+
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+~                                                                                                                              
+"/etc/pgbackrest.conf" 13L, 278C
+
+
+[root@localhost ~]# su - postgres
+
+bash-4.2$ cd storage2
+-bash-4.2$ vi postgresql.conf
+listen_addresses ='*'
+password_encryption= scram-sha-256
+archive_mode = on
+archive_command = 'pgbackrest --stanza=demo archive-push %p
+
+
+postgres=# alter system set archive_command = 'pgbackrest --stanza=demo archive-push %p';
+ALTER SYSTEM
+postgres=# show archive_command;
+                 archive_command                 
+-------------------------------------------------
+ pgbackrest --stanza=prod_backup archive-push %p
+(1 row)
+
+postgres=# select pg_reload_conf();
+ pg_reload_conf 
+----------------
+
+\q
+
+-bash-4.2$ pgbackrest --stanza=demo stanza-create
+2023-02-01 12:52:13.291 P00   INFO: stanza-create command begin 2.43: --exec-id=79389-8b3cd8b6 --log-level-console=info --log-level-file=debug --pg1-path=/var/lib/pgsql/storage2 --pg1-port=5434 --repo1-cipher-pass=<redacted> --repo1-cipher-type=aes-256-cbc --repo1-path=/var/lib/pgbackrest --stanza=demo
+2023-02-01 12:52:13.918 P00   INFO: stanza-create for stanza 'demo' on repo1
+2023-02-01 12:52:13.966 P00   INFO: stanza-create command end: completed successfully (678ms)
+
+-bash-4.2$ pgbackrest --stanza=demo check
+2023-02-01 13:06:23.209 P00   INFO: check command begin 2.43: --exec-id=79775-6fa25795 --log-level-console=info --log-level-file=debug --pg1-path=/var/lib/pgsql/storage2 --pg1-port=5434 --repo1-cipher-pass=<redacted> --repo1-cipher-type=aes-256-cbc --repo1-path=/var/lib/pgbackrest --stanza=demo
+2023-02-01 13:06:23.927 P00   INFO: check repo1 configuration (primary)
+2023-02-01 13:06:24.293 P00   INFO: check repo1 archive for WAL (primary)
+2023-02-01 13:06:25.036 P00   INFO: WAL segment 000000010000000000000002 successfully archived to '/var/lib/pgbackrest/archive/demo/12-1/0000000100000000/000000010000000000000002-cf0df25f72b383915284195b4a96ef87a2382fa3.gz' on repo1
+2023-02-01 13:06:25.036 P00   INFO: check command end: completed successfully (1829ms)
+
+
+-bash-4.2$ pgbackrest --stanza=demo --type=full backup
+2023-02-01 13:10:25.624 P00   INFO: backup command begin 2.43: --exec-id=79847-22b25b54 --log-level-console=info --log-level-file=debug --pg1-path=/var/lib/pgsql/storage2 --pg1-port=5434 --repo1-cipher-pass=<redacted> --repo1-cipher-type=aes-256-cbc --repo1-path=/var/lib/pgbackrest --repo1-retention-full=2 --stanza=demo --type=full
+2023-02-01 13:10:26.363 P00   INFO: execute non-exclusive backup start: backup begins after the next regular checkpoint completes
+2023-02-01 13:10:27.913 P00   INFO: backup start archive = 000000010000000000000004, lsn = 0/4000060
+2023-02-01 13:10:27.913 P00   INFO: check archive for prior segment 000000010000000000000003
+2023-02-01 13:10:41.692 P00   INFO: execute non-exclusive backup stop and wait for all WAL segments to archive
+2023-02-01 13:10:41.995 P00   INFO: backup stop archive = 000000010000000000000004, lsn = 0/4000138
+2023-02-01 13:10:41.998 P00   INFO: check archive for segment(s) 000000010000000000000004:000000010000000000000004
+2023-02-01 13:10:42.510 P00   INFO: new backup label = 20230201-131026F
+2023-02-01 13:10:42.564 P00   INFO: full backup size = 24.3MB, file total = 981
+2023-02-01 13:10:42.564 P00   INFO: backup command end: completed successfully (16945ms)
+2023-02-01 13:10:42.581 P00   INFO: expire command begin 2.43: --exec-id=79847-22b25b54 --log-level-console=info --log-level-file=debug --repo1-cipher-pass=<redacted> --repo1-cipher-type=aes-256-cbc --repo1-path=/var/lib/pgbackrest --repo1-retention-full=2 --stanza=demo
+2023-02-01 13:10:42.591 P00   INFO: expire command end: completed successfully (27ms)
+-bash-4.2$ 
+
+
+-bash-4.2$ pgbackrest info
+stanza: demo
+    status: ok
+    cipher: aes-256-cbc
+
+    db (current)
+        wal archive min/max (12): 000000010000000000000001/000000010000000000000004
+
+        full backup: 20230201-131026F
+            timestamp start/stop: 2023-02-01 13:10:26 / 2023-02-01 13:10:41
+            wal start/stop: 000000010000000000000004 / 000000010000000000000004
+            database size: 24.3MB, database backup size: 24.3MB
+            repo1: backup set size: 2.9MB, backup size: 2.9MB
+
+
+
+-bash-4.2$ /usr/pgsql-12/bin/pg_ctl -D /var/lib/pgsql/storage2 stop
+waiting for server to shut down.... done
+server stopped
+-bash-4.2$
+
+-bash-4.2$ find /var/lib/pgsql/storage2 -mindepth 1  -delete
+-bash-4.2$ 
+
+-bash-4.2$ /usr/pgsql-12/bin/pg_ctl -D /var/lib/pgsql/storage2 start
+pg_ctl: directory "/var/lib/pgsql/storage2" is not a database cluster directory
+-bash-4.2$ 
+
+
+-bash-4.2$ pgbackrest --stanza=demo --delta restore
+2023-02-01 13:23:16.613 P00   INFO: restore command begin 2.43: --delta --exec-id=80040-ad849eac --log-level-console=info --log-level-file=debug --pg1-path=/var/lib/pgsql/storage2 --repo1-cipher-pass=<redacted> --repo1-cipher-type=aes-256-cbc --repo1-path=/var/lib/pgbackrest --stanza=demo
+WARN: --delta or --force specified but unable to find 'PG_VERSION' or 'backup.manifest' in '/var/lib/pgsql/storage2' to confirm that this is a valid $PGDATA directory.  --delta and --force have been disabled and if any files exist in the destination directories the restore will be aborted.
+2023-02-01 13:23:16.644 P00   INFO: repo1: restore backup set 20230201-131026F, recovery will start at 2023-02-01 13:10:26
+2023-02-01 13:23:19.374 P00   INFO: write updated /var/lib/pgsql/storage2/postgresql.auto.conf
+2023-02-01 13:23:19.401 P00   INFO: restore global/pg_control (performed last to ensure aborted restores cannot be started)
+2023-02-01 13:23:19.442 P00   INFO: restore size = 24.3MB, file total = 981
+2023-02-01 13:23:19.443 P00   INFO: restore command end: completed successfully (2837ms)
+-bash-4.2$ 
+
+
+
+-bash-4.2$ /usr/pgsql-12/bin/pg_ctl -D /var/lib/pgsql/storage2 start
+waiting for server to start....2023-02-01 13:24:07.039 EST [80054] LOG:  starting PostgreSQL 12.10 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 4.8.5 20150623 (Red Hat 4.8.5-44), 64-bit
+2023-02-01 13:24:07.042 EST [80054] LOG:  listening on IPv4 address "0.0.0.0", port 5434
+2023-02-01 13:24:07.043 EST [80054] LOG:  listening on IPv6 address "::", port 5434
+2023-02-01 13:24:07.045 EST [80054] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5434"
+2023-02-01 13:24:07.050 EST [80054] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5434"
+2023-02-01 13:24:07.121 EST [80054] LOG:  redirecting log output to logging collector process
+2023-02-01 13:24:07.121 EST [80054] HINT:  Future log output will appear in directory "log".
+ done
+server started
+-bash-4.2$ 
+
+
+
